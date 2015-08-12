@@ -34,44 +34,67 @@
     @endforeach
 </ul>
 <script>
-    (function () {
-        Chart.defaults.global.pointHitDetectionRadius = 1;
+(function () {
+    Chart.defaults.global.pointHitDetectionRadius = 1;
 
-        var metricLists = {
-            hourly: {
-                points: 10,
-                label: 'HH:ss'
-            },
-            daily: {
-                points: 6,
-                label: 'D'
-            },
-            weekly: {
-                points: 51,
-                label: 'W'
-            }
-        };
+    var metricLists = {
+        hourly: {
+            points: 10,
+            label: 'HH:ss',
+            subtract: 'hours',
+            callback: groupPointsByHour
+        },
+        daily: {
+            points: 6,
+            label: 'D',
+            subtract: 'days'
+        },
+        weekly: {
+            points: 51,
+            label: 'W',
+            subtract: 'weeks'
+        }
+    };
 
-        var date = new Date();
+    var date = new Date();
 
-        var defaultData = {
-            showTooltips: false,
-            labels: [],
-            datasets: [{
-                fillColor: "rgba(220,220,220,0.1)",
-                strokeColor: "rgba(52,152,219,0.6)",
-                pointColor: "rgba(220,220,220,1)",
-                pointStrokeColor: "#fff",
-                pointHighlightFill: "#fff",
-                pointHighlightStroke: "rgba(220,220,220,1)",
-                data: []
-            }],
-        };
+    var defaultData = {
+        showTooltips: false,
+        labels: [],
+        datasets: [{
+            fillColor: "rgba(220,220,220,0.1)",
+            strokeColor: "rgba(52,152,219,0.6)",
+            pointColor: "rgba(220,220,220,1)",
+            pointStrokeColor: "#fff",
+            pointHighlightFill: "#fff",
+            pointHighlightStroke: "rgba(220,220,220,1)",
+            data: []
+        }],
+    };
 
-        $('canvas[data-metric-id]').each(function() {
-            var $this = $(this);
-            var metricId = $this.data('metric-id');
-            var metricGroup = $this.data('metric-group');
+    $('a[data-filter-type]').on('click', function(e) {
+        e.preventDefault();
+
+        var $this = $(this);
+        var $canvas = $this.parents('li').find('canvas');
+
+        $canvas.data('metric-group', $this.data('data-filter-type'));
+
+        drawChart($canvas);
+    });
+
+    $('canvas[data-metric-id]').each(function() {
+        var $this = $(this);
+
+        drawChart($this);
+    });
+
+    function drawChart($el) {
+        var metricId = $el.data('metric-id');
+        var metricGroup = $el.data('metric-group');
+
+        var ctx = document.getElementById("metric-"+metricId).getContext("2d");
+
         fetchPoints(metricId).then(function (points) {
             var chartConfig = defaultData,
                 labels = [];
@@ -83,17 +106,28 @@
 
             chartConfig.labels = labels;
 
-            var ctx = document.getElementById("metric-"+metricId).getContext("2d");
+            // TODO: Make this dynamic data.
+            var groupedPoints = metricLists[metricGroup].callback(points);
+            console.log(groupedPoints);
+            chartConfig.datasets[0].data = groupedPoints;
 
             new Chart(ctx).Line(chartConfig, {
-                tooltipTemplate: "{!! $metric->name !!}: <%= value %>{!! $metric->suffix !!}",
+                tooltipTemplate: "{!! $metric->name !!}: <%= value %> {!! $metric->suffix !!}",
                 scaleShowVerticalLines: true,
                 scaleShowLabels: false,
                 responsive: true,
                 maintainAspectRatio: false
             });
         });
-    });
+    }
+
+    function groupPointsByHour(points) {
+        return _.groupBy(points, function(point) {
+            return moment(point.created_at).format('YYYY-MM-DD h');
+        }).map(function(point, label) {
+            console.log(point, label)
+        });
+    }
 
     function fetchPoints(metricId) {
         return $.ajax({
